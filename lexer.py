@@ -30,8 +30,10 @@ MUL = "MUL"
 DIV = "DIV"
 LT = "LT"
 GT = "GT"
-EQ = "EQ"
+LE = "LE"
+GE = "GE"
 EQEQ = "EQEQ"
+NEQ = "NEQ"
 ASSIGN = "ASSIGN"
 LPAREN = "LPAREN"
 RPAREN = "RPAREN"
@@ -220,12 +222,28 @@ class Lexer:
                 self.advance()
                 continue
             if char == '<':
-                self.tokens.append(Token(LT, '<', self.line, self.col))
                 self.advance()
+                if self.current_char() == '=':
+                    self.advance()
+                    self.tokens.append(Token(LE, '<=', self.line, self.col - 1))
+                else:
+                    self.tokens.append(Token(LT, '<', self.line, self.col - 1))
                 continue
             if char == '>':
-                self.tokens.append(Token(GT, '>', self.line, self.col))
                 self.advance()
+                if self.current_char() == '=':
+                    self.advance()
+                    self.tokens.append(Token(GE, '>=', self.line, self.col - 1))
+                else:
+                    self.tokens.append(Token(GT, '>', self.line, self.col - 1))
+                continue
+            if char == '!':
+                self.advance()
+                if self.current_char() == '=':
+                    self.advance()
+                    self.tokens.append(Token(NEQ, '!=', self.line, self.col - 1))
+                else:
+                    raise LexerError(f"Unexpected character after '!': {repr(self.current_char())}", self.line, self.col)
                 continue
             if char == '(':
                 self.tokens.append(Token(LPAREN, '(', self.line, self.col))

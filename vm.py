@@ -2,7 +2,8 @@
 
 from bytecode import (
     LOAD_CONST, LOAD_NAME, STORE_NAME, ADD, SUB, MUL, DIV,
-    CMP_LT, CMP_GT, CMP_EQ, JUMP, JUMP_IF_FALSE, PRINT, HALT
+    CMP_LT, CMP_GT, CMP_LE, CMP_GE, CMP_EQ, CMP_NEQ,
+    JUMP, JUMP_IF_FALSE, JUMP_IF_TRUE, POP, PRINT, HALT
 )
 from errors import VMError
 
@@ -20,6 +21,8 @@ class VM:
     
     def push(self, value):
         """Push value onto stack."""
+        if len(self.stack) > 10000:  # Stack safety check
+            raise VMError("Stack overflow", self.ip)
         self.stack.append(value)
     
     def pop(self):
@@ -98,21 +101,56 @@ class VM:
                 self.push(1 if a > b else 0)
                 self.ip += 1
             
+            elif opcode == CMP_LE:
+                b = self.pop()
+                a = self.pop()
+                self.push(1 if a <= b else 0)
+                self.ip += 1
+            
+            elif opcode == CMP_GE:
+                b = self.pop()
+                a = self.pop()
+                self.push(1 if a >= b else 0)
+                self.ip += 1
+            
             elif opcode == CMP_EQ:
                 b = self.pop()
                 a = self.pop()
                 self.push(1 if a == b else 0)
                 self.ip += 1
             
+            elif opcode == CMP_NEQ:
+                b = self.pop()
+                a = self.pop()
+                self.push(1 if a != b else 0)
+                self.ip += 1
+            
             elif opcode == JUMP:
+                if arg is None or arg < 0 or arg >= len(self.code):
+                    raise VMError(f"Invalid jump target: {arg}", self.ip)
                 self.ip = arg
             
             elif opcode == JUMP_IF_FALSE:
                 value = self.pop()
                 if value == 0:  # False
+                    if arg is None or arg < 0 or arg >= len(self.code):
+                        raise VMError(f"Invalid jump target: {arg}", self.ip)
                     self.ip = arg
                 else:
                     self.ip += 1
+            
+            elif opcode == JUMP_IF_TRUE:
+                value = self.pop()
+                if value != 0:  # True
+                    if arg is None or arg < 0 or arg >= len(self.code):
+                        raise VMError(f"Invalid jump target: {arg}", self.ip)
+                    self.ip = arg
+                else:
+                    self.ip += 1
+            
+            elif opcode == POP:
+                self.pop()  # Discard top of stack
+                self.ip += 1
             
             elif opcode == PRINT:
                 value = self.pop()

@@ -1,85 +1,100 @@
 """AST node classes for MiniPy."""
 
+from dataclasses import dataclass
+from typing import List, Optional, Union
+
 
 class ASTNode:
     """Base class for all AST nodes."""
     pass
 
 
+@dataclass
 class Program(ASTNode):
     """Root node representing a complete program."""
-    def __init__(self, statements):
-        self.statements = statements
+    statements: List['Statement']
     
     def __repr__(self):
         return f"Program({len(self.statements)} statements)"
 
 
+@dataclass
 class Assign(ASTNode):
     """Assignment statement: name = expression"""
-    def __init__(self, name, expr):
-        self.name = name
-        self.expr = expr
+    name: str
+    expr: 'Expression'
+    line: int = 0
     
     def __repr__(self):
         return f"Assign({self.name}, {self.expr})"
 
 
+@dataclass
 class Print(ASTNode):
     """Print statement: print(expression)"""
-    def __init__(self, expr):
-        self.expr = expr
+    expr: 'Expression'
+    line: int = 0
     
     def __repr__(self):
         return f"Print({self.expr})"
 
 
+@dataclass
 class If(ASTNode):
     """If statement: if cond: then_body else: else_body"""
-    def __init__(self, cond, then_body, else_body=None):
-        self.cond = cond
-        self.then_body = then_body
-        self.else_body = else_body
+    cond: 'Expression'
+    then_body: List['Statement']
+    else_body: Optional[List['Statement']] = None
+    line: int = 0
     
     def __repr__(self):
         return f"If({self.cond}, {len(self.then_body)} stmts, else: {len(self.else_body) if self.else_body else 0} stmts)"
 
 
+@dataclass
 class While(ASTNode):
     """While loop: while cond: body"""
-    def __init__(self, cond, body):
-        self.cond = cond
-        self.body = body
+    cond: 'Expression'
+    body: List['Statement']
+    line: int = 0
     
     def __repr__(self):
         return f"While({self.cond}, {len(self.body)} stmts)"
 
 
+@dataclass
 class BinOp(ASTNode):
     """Binary operation: left op right"""
-    def __init__(self, left, op, right):
-        self.left = left
-        self.op = op
-        self.right = right
+    left: 'Expression'
+    op: str
+    right: 'Expression'
+    line: int = 0
     
     def __repr__(self):
         return f"BinOp({self.left}, {self.op}, {self.right})"
 
 
+@dataclass
 class Number(ASTNode):
     """Number literal."""
-    def __init__(self, value):
-        self.value = value
+    value: int
+    line: int = 0
     
     def __repr__(self):
         return f"Number({self.value})"
 
 
+@dataclass
 class Var(ASTNode):
     """Variable reference."""
-    def __init__(self, name):
-        self.name = name
+    name: str
+    line: int = 0
     
     def __repr__(self):
         return f"Var({self.name})"
+
+
+# Type aliases for type hints
+Statement = Union[Assign, Print, If, While]
+Expression = Union[BinOp, Number, Var]
 

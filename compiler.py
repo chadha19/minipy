@@ -1,8 +1,13 @@
 """Compiler: converts AST to bytecode."""
 
 from ast_nodes import Program, Assign, Print, If, While, BinOp, Number, Var
-from bytecode import Instruction, LOAD_CONST, LOAD_NAME, STORE_NAME, ADD, SUB, MUL, DIV
-from bytecode import CMP_LT, CMP_GT, CMP_EQ, JUMP, JUMP_IF_FALSE, PRINT, HALT
+from bytecode import (
+    Instruction, LOAD_CONST, LOAD_NAME, STORE_NAME, ADD, SUB, MUL, DIV,
+    CMP_LT, CMP_GT, CMP_LE, CMP_GE, CMP_EQ, CMP_NEQ,
+    JUMP, JUMP_IF_FALSE, JUMP_IF_TRUE, POP, PRINT, HALT
+)
+from semantic import SemanticAnalyzer
+from optimizer import Optimizer
 
 
 class Compiler:
@@ -92,7 +97,7 @@ class Compiler:
         
         # Patch else jump
         else_label = len(self.code)
-        self.code[else_label_pos].arg = else_label
+        self.patch_jump(else_label_pos, else_label)
         
         # Compile else body (if exists)
         if node.else_body:
@@ -101,7 +106,7 @@ class Compiler:
         
         # Patch end jump
         end_label = len(self.code)
-        self.code[end_label_pos].arg = end_label
+        self.patch_jump(end_label_pos, end_label)
     
     def compile_while(self, node):
         """Compile while: loop_start, condition, JUMP_IF_FALSE end, body, JUMP start"""
@@ -122,7 +127,7 @@ class Compiler:
         
         # Patch end jump
         end_label = len(self.code)
-        self.code[end_label_pos].arg = end_label
+        self.patch_jump(end_label_pos, end_label)
     
     def compile_binop(self, node):
         """Compile binary operation: compile left, compile right, emit op"""
@@ -141,10 +146,21 @@ class Compiler:
             self.emit(CMP_LT)
         elif node.op == ">":
             self.emit(CMP_GT)
+        elif node.op == "<=":
+            self.emit(CMP_LE)
+        elif node.op == ">=":
+            self.emit(CMP_GE)
         elif node.op == "==":
             self.emit(CMP_EQ)
+        elif node.op == "!=":
+            self.emit(CMP_NEQ)
         else:
             raise ValueError(f"Unknown operator: {node.op}")
+    
+    def patch_jump(self, pos: int, target: int) -> None:
+        """Patch a jump instruction at position pos to jump to target."""
+        if pos < len(self.code):
+            self.code[pos].arg = target
     
     def compile_number(self, node):
         """Compile number: LOAD_CONST"""
@@ -166,17 +182,22 @@ def compile_ast(ast):
 
 if __name__ == "__main__":
     import sys
+    import os
     from lexer import Lexer
     from parser import Parser
     from vm import VM
     from bytecode import format_bytecode
+    from ast_viz import ast_to_dot
+    from bytecode_serializer import serialize_bytecode
     
     if len(sys.argv) < 2:
-        print("Usage: python compiler.py <file.mp> [--debug]")
+        print("Usage: python compiler.py <file.mp> [--debug] [--dump-ast] [--compile-only]")
         sys.exit(1)
     
     filename = sys.argv[1]
     debug = "--debug" in sys.argv
+    dump_ast = "--dump-ast" in sys.argv
+    compile_only = "--compile-only" in sys.argv
     
     try:
         # Read source file
@@ -200,6 +221,32 @@ if __name__ == "__main__":
             print(ast)
             print()
         
+        # Semantic analysis
+        semantic = SemanticAnalyzer()
+        errors = semantic.check(ast)
+        if errors:
+            print("=== SEMANTIC ERRORS ===")
+            for error in errors:
+                print(error)
+            print()
+            if not debug:
+                sys.exit(1)
+        
+        # Optimize
+        optimizer = Optimizer()
+        ast = optimizer.optimize(ast)
+        if debug:
+            print("=== OPTIMIZED AST ===")
+            print(ast)
+            print()
+        
+        # Dump AST if requested
+        if dump_ast:
+            dot_file = filename.replace('.mp', '.dot').replace('.mpy', '.dot')
+            ast_to_dot(ast, dot_file)
+            print(f"AST dumped to {dot_file}")
+            print(f"Generate visualization with: dot -Tpng {dot_file} -o {dot_file.replace('.dot', '.png')}")
+        
         # Compile
         code, consts, names = compile_ast(ast)
         if debug:
@@ -209,9 +256,16 @@ if __name__ == "__main__":
             print(f"Names: {names}")
             print()
         
-        # Execute
-        vm = VM(code, consts, names)
-        vm.run()
+        # Serialize bytecode for C++ VM
+        bytecode_file = filename.replace('.mp', '.mpbc').replace('.mpy', '.mpbc')
+        serialize_bytecode(code, consts, names, bytecode_file)
+        if debug:
+            print(f"Bytecode serialized to {bytecode_file}")
+        
+        # Execute (unless compile-only)
+        if not compile_only:
+            vm = VM(code, consts, names)
+            vm.run()
         
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found")

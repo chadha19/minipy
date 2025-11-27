@@ -2,7 +2,7 @@
 
 from lexer import (
     Token, IDENT, NUMBER, KEYWORD, PLUS, MINUS, MUL, DIV,
-    LT, GT, EQEQ, ASSIGN, LPAREN, RPAREN, COLON,
+    LT, GT, LE, GE, EQEQ, NEQ, ASSIGN, LPAREN, RPAREN, COLON,
     NEWLINE, INDENT, DEDENT, EOF
 )
 from ast_nodes import (
@@ -18,7 +18,6 @@ class Parser:
     def __init__(self, tokens):
         self.tokens = tokens
         self.pos = 0
-        self.variables = set()  # Track defined variables for semantic checks
     
     def current_token(self):
         """Get current token or EOF."""
@@ -120,20 +119,19 @@ class Parser:
         name = name_token.value
         self.expect(ASSIGN)
         expr = self.parse_expression()
-        self.variables.add(name)  # Track defined variable
-        return Assign(name, expr)
+        return Assign(name, expr, name_token.line)
     
     def parse_print(self):
         """Parse print statement: print(expression)"""
-        self.expect(KEYWORD, "print")
+        print_token = self.expect(KEYWORD, "print")
         self.expect(LPAREN)
         expr = self.parse_expression()
         self.expect(RPAREN)
-        return Print(expr)
+        return Print(expr, print_token.line)
     
     def parse_if(self):
         """Parse if statement: if expr: block else: block"""
-        self.expect(KEYWORD, "if")
+        if_token = self.expect(KEYWORD, "if")
         cond = self.parse_expression()
         self.expect(COLON)
         self.skip_newlines()
@@ -146,16 +144,16 @@ class Parser:
             self.skip_newlines()
             else_body = self.parse_block()
         
-        return If(cond, then_body, else_body)
+        return If(cond, then_body, else_body, if_token.line)
     
     def parse_while(self):
         """Parse while loop: while expr: block"""
-        self.expect(KEYWORD, "while")
+        while_token = self.expect(KEYWORD, "while")
         cond = self.parse_expression()
         self.expect(COLON)
         self.skip_newlines()
         body = self.parse_block()
-        return While(cond, body)
+        return While(cond, body, while_token.line)
     
     def parse_expression(self):
         """Parse an expression (comparison level)."""
@@ -165,15 +163,27 @@ class Parser:
         if token.type == LT:
             self.advance()
             right = self.parse_additive()
-            return BinOp(left, "<", right)
+            return BinOp(left, "<", right, token.line)
         elif token.type == GT:
             self.advance()
             right = self.parse_additive()
-            return BinOp(left, ">", right)
+            return BinOp(left, ">", right, token.line)
+        elif token.type == LE:
+            self.advance()
+            right = self.parse_additive()
+            return BinOp(left, "<=", right, token.line)
+        elif token.type == GE:
+            self.advance()
+            right = self.parse_additive()
+            return BinOp(left, ">=", right, token.line)
         elif token.type == EQEQ:
             self.advance()
             right = self.parse_additive()
-            return BinOp(left, "==", right)
+            return BinOp(left, "==", right, token.line)
+        elif token.type == NEQ:
+            self.advance()
+            right = self.parse_additive()
+            return BinOp(left, "!=", right, token.line)
         
         return left
     
@@ -186,11 +196,11 @@ class Parser:
             if token.type == PLUS:
                 self.advance()
                 right = self.parse_multiplicative()
-                left = BinOp(left, "+", right)
+                left = BinOp(left, "+", right, token.line)
             elif token.type == MINUS:
                 self.advance()
                 right = self.parse_multiplicative()
-                left = BinOp(left, "-", right)
+                left = BinOp(left, "-", right, token.line)
             else:
                 break
         
@@ -205,11 +215,11 @@ class Parser:
             if token.type == MUL:
                 self.advance()
                 right = self.parse_factor()
-                left = BinOp(left, "*", right)
+                left = BinOp(left, "*", right, token.line)
             elif token.type == DIV:
                 self.advance()
                 right = self.parse_factor()
-                left = BinOp(left, "/", right)
+                left = BinOp(left, "/", right, token.line)
             else:
                 break
         
@@ -221,15 +231,14 @@ class Parser:
         
         if token.type == NUMBER:
             self.advance()
-            return Number(token.value)
+            return Number(token.value, token.line)
         
         if token.type == IDENT:
             name = token.value
             self.advance()
-            # Semantic check: variable must be defined
-            if name not in self.variables:
-                raise SemanticError(f"Undefined variable: {name}", token.line)
-            return Var(name)
+            # Note: semantic checking moved to semantic analysis pass
+            # Remove old variable tracking
+            return Var(name, token.line)
         
         if token.type == LPAREN:
             self.advance()
@@ -242,9 +251,4 @@ class Parser:
             token.line, token.col
         )
     
-    def check_semantics(self, node):
-        """Perform semantic analysis on AST."""
-        # Variable usage checking is done during parsing
-        # This method can be extended for additional checks
-        pass
 
